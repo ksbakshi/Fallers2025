@@ -37,6 +37,48 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse?.({ success: true });
         return;
       }
+      if (msg?.type === "NAVIGATE_TO" && msg.url) {
+        const target = msg.target || "current";
+        if (target === "new") {
+          await chrome.tabs.create({ url: msg.url, active: false });
+        } else if (sender?.tab?.id) {
+          await chrome.tabs.update(sender.tab.id, { url: msg.url });
+        } else {
+          await chrome.tabs.create({ url: msg.url });
+        }
+        sendResponse?.({ success: true });
+        return;
+      }
+
+      // ADD: history navigation (back/forward), used by "move back"/"move forward"
+      if (msg?.type === "HISTORY" && sender?.tab?.id) {
+        const tabId = sender.tab.id;
+
+        // Prefer native APIs if present
+        if (msg.direction === "back" && chrome.tabs.goBack) {
+          try { await chrome.tabs.goBack(tabId); } catch {}
+          sendResponse?.({ success: true });
+          return;
+        }
+        if (msg.direction === "forward" && chrome.tabs.goForward) {
+          try { await chrome.tabs.goForward(tabId); } catch {}
+          sendResponse?.({ success: true });
+          return;
+        }
+
+        // Fallback: execute history.back()/forward() in the page
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId },
+            func: (dir) => { dir === "back" ? history.back() : history.forward(); },
+            args: [msg.direction],
+          });
+          sendResponse?.({ success: true });
+        } catch (e) {
+          sendResponse?.({ success: false, error: String(e) });
+        }
+        return;
+      }
       sendResponse?.({ success: false, error: "Unknown message" });
     } catch (e) {
       sendResponse?.({ success: false, error: String(e) });
