@@ -14,10 +14,17 @@ if (!window.__voice_nav_injected__) {
     background: "#1f6feb",
     color: "white",
     border: "none",
-    zIndex: "999999"
+    zIndex: "999999",
   });
 
   document.body.appendChild(btn);
+
+  btn.style.display = "none";
+
+  window.__voice_nav_toggle = () => {
+    const current = btn.style.display || getComputedStyle(btn).display;
+    btn.style.display = current === "none" ? "block" : "none";
+  };
 
   let listening = false;
   let recognition;
@@ -25,10 +32,10 @@ if (!window.__voice_nav_injected__) {
   // Voice command processing function
   function processVoiceCommand(transcript) {
     const lowerTranscript = transcript.toLowerCase().trim();
-    
+
     // Search command: "search [query]" or "search for [query]"
-    if (lowerTranscript.startsWith('search ')) {
-      const searchQuery = lowerTranscript.replace(/^search (for )?/, '').trim();
+    if (lowerTranscript.startsWith("search ")) {
+      const searchQuery = lowerTranscript.replace(/^search (for )?/, "").trim();
       if (searchQuery) {
         executeSearch(searchQuery);
         // Stop listening after executing command
@@ -44,26 +51,29 @@ if (!window.__voice_nav_injected__) {
   function executeSearch(query) {
     // Provide visual feedback
     btn.textContent = `🔍 Searching: ${query}`;
-    
+
     // Create search URL
-    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-    
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(
+      query
+    )}`;
+
     // Open search in new tab
     chrome.runtime.sendMessage({
-      type: 'OPEN_SEARCH',
-      url: searchUrl
+      type: "OPEN_SEARCH",
+      url: searchUrl,
     });
-    
+
     // Hide command hints
     hideCommandHint();
-    
+
     // Reset button after showing search feedback
     setTimeout(() => {
       btn.textContent = "🎤 Voice Nav (off)";
     }, 2000);
   }
 
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const SpeechRecognition =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
   if (SpeechRecognition) {
     recognition = new SpeechRecognition();
     recognition.lang = "en-US";
@@ -76,12 +86,15 @@ if (!window.__voice_nav_injected__) {
         .map((res) => res[0].transcript)
         .join("");
       console.log("Heard:", transcript);
-      
+
       // Process voice commands
       processVoiceCommand(transcript);
-      
+
       // Show live feedback (truncated if too long)
-      const displayText = transcript.length > 20 ? transcript.substring(0, 20) + "..." : transcript;
+      const displayText =
+        transcript.length > 20
+          ? transcript.substring(0, 20) + "..."
+          : transcript;
       btn.textContent = `🎤 ${displayText}`;
     };
 
@@ -89,7 +102,7 @@ if (!window.__voice_nav_injected__) {
       listening = false;
       hideCommandHint();
       // Only reset button if it's not showing a search message
-      if (!btn.textContent.includes('🔍 Searching:')) {
+      if (!btn.textContent.includes("🔍 Searching:")) {
         btn.textContent = "🎤 Voice Nav (off)";
       }
     };
@@ -115,10 +128,10 @@ if (!window.__voice_nav_injected__) {
 
   // Show command hints
   function showCommandHint() {
-    if (document.getElementById('voice-hint')) return;
-    
-    const hint = document.createElement('div');
-    hint.id = 'voice-hint';
+    if (document.getElementById("voice-hint")) return;
+
+    const hint = document.createElement("div");
+    hint.id = "voice-hint";
     hint.innerHTML = `
       <div style="
         position: fixed;
@@ -142,7 +155,7 @@ if (!window.__voice_nav_injected__) {
 
   // Hide command hints
   function hideCommandHint() {
-    const hint = document.getElementById('voice-hint');
+    const hint = document.getElementById("voice-hint");
     if (hint) {
       hint.remove();
     }
