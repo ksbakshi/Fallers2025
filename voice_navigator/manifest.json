@@ -9,6 +9,10 @@
     "activeTab",
     "webNavigation"
   ],
+  "host_permissions": [
+    "https://api.spotify.com/*",
+    "https://accounts.spotify.com/*"
+  ],
   "background": { "service_worker": "service_worker.js" },
   "commands": {
     "toggle-mic": {
