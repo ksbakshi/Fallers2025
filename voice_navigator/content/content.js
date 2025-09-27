@@ -23,7 +23,23 @@ if (!window.__voice_nav_injected__) {
 
   window.__voice_nav_toggle = () => {
     const current = btn.style.display || getComputedStyle(btn).display;
-    btn.style.display = current === "none" ? "block" : "none";
+    const show = current === "none";
+    btn.style.display = show ? "block" : "none";
+    if (!show) stopListening();
+  };
+
+  // ✅ called by SW after navigation to auto-resume
+  window.__voice_nav_autostart = () => {
+    btn.style.display = "block";
+    if (!listening && recognition) {
+      listening = true;
+      try {
+        recognition.start();
+        isRunning = true;
+      } catch {}
+    }
+    btn.textContent = "🎤 Listening...";
+    showCommandHint();
   };
 
   let listening = false;
@@ -43,9 +59,15 @@ if (!window.__voice_nav_injected__) {
 
     // target parsing
     let target = "current"; // default: same tab
-    if (/\b(in|on)\s+(a\s+)?new\s+tab\b/.test(query) || /\bnew\s+tab\b/.test(query)) {
+    if (
+      /\b(in|on)\s+(a\s+)?new\s+tab\b/.test(query) ||
+      /\bnew\s+tab\b/.test(query)
+    ) {
       target = "new";
-      query = query.replace(/\b(in|on)\s+(a\s+)?new\s+tab\b/g, "").replace(/\bnew\s+tab\b/g, "").trim();
+      query = query
+        .replace(/\b(in|on)\s+(a\s+)?new\s+tab\b/g, "")
+        .replace(/\bnew\s+tab\b/g, "")
+        .trim();
     } else if (/\b(here|this\s+tab|same\s+tab)\b/.test(query)) {
       target = "current";
       query = query.replace(/\b(here|this\s+tab|same\s+tab)\b/g, "").trim();
@@ -60,16 +82,20 @@ if (!window.__voice_nav_injected__) {
 
   function executeSearch(query, target = "current") {
     btn.textContent = `🔍 Searching: ${query}`;
-    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(
+      query
+    )}`;
 
     chrome.runtime.sendMessage({
       type: "OPEN_SEARCH",
       url: searchUrl,
-      target,                   // "current" or "new"
+      target, // "current" or "new"
     });
 
     hideCommandHint();
-    setTimeout(() => { btn.textContent = "🎤 Voice Nav (off)"; }, 1200);
+    setTimeout(() => {
+      btn.textContent = "🎤 Voice Nav (off)";
+    }, 1200);
   }
 
   // (helper) add this to manage consistent stopping
@@ -85,7 +111,7 @@ if (!window.__voice_nav_injected__) {
   if (SpeechRecognition) {
     recognition = new SpeechRecognition();
     recognition.lang = "en-US";
-    recognition.continuous = false;     // end after each phrase
+    recognition.continuous = false; // end after each phrase
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
@@ -94,15 +120,18 @@ if (!window.__voice_nav_injected__) {
       if (!res || !res.isFinal) return;
 
       const transcript = res[0].transcript;
-      processVoiceCommand(transcript);   // this calls executeSearch() immediately if it finds "search ..."
+      processVoiceCommand(transcript); // this calls executeSearch() immediately if it finds "search ..."
     };
 
     recognition.onend = () => {
       hideCommandHint();
-      if (listening) {                   // auto-restart while toggle is ON
-        try { recognition.start(); } catch (_) {}
+      if (listening) {
+        // auto-restart while toggle is ON
+        try {
+          recognition.start();
+        } catch (_) {}
         btn.textContent = "🎤 Listening...";
-      } else if (!btn.textContent.includes('🔍 Searching:')) {
+      } else if (!btn.textContent.includes("🔍 Searching:")) {
         btn.textContent = "🎤 Voice Nav (off)";
       }
     };
@@ -115,14 +144,21 @@ if (!window.__voice_nav_injected__) {
     if (!recognition) return;
     if (!listening) {
       listening = true;
-      try { recognition.start(); } catch (_) {}
+      try {
+        recognition.start();
+        isRunning = true;
+      } catch {}
       btn.textContent = "🎤 Listening...";
       showCommandHint();
+      chrome.runtime.sendMessage({ type: "LISTENING_STATE", state: "ON" });
     } else {
       listening = false;
-      try { recognition.stop(); } catch (_) {}
+      try {
+        recognition.stop();
+      } catch {}
       btn.textContent = "🎤 Voice Nav (off)";
       hideCommandHint();
+      chrome.runtime.sendMessage({ type: "LISTENING_STATE", state: "OFF" });
     }
   });
 
