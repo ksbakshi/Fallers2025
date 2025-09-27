@@ -23,20 +23,21 @@ chrome.commands.onCommand.addListener(async (command) => {
 });
 
 // Handle messages from content script (e.g., OPEN_SEARCH)
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  (async () => {
-    try {
-      if (request?.type === "OPEN_SEARCH" && request.url) {
-        await chrome.tabs.create({ url: request.url });
-        sendResponse({ success: true });
-        return;
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (msg.type === "OPEN_SEARCH") {
+    const url = msg.url;
+    const target = msg.target || "current";
+
+    if (target === "new") {
+      chrome.tabs.create({ url });
+    } else {
+      // Prefer updating the sender's tab; fallback to new tab if missing
+      const tabId = sender?.tab?.id;
+      if (tabId) {
+        chrome.tabs.update(tabId, { url });
+      } else {
+        chrome.tabs.create({ url });
       }
-      // Unknown message
-      sendResponse({ success: false, error: "Unknown message type" });
-    } catch (e) {
-      sendResponse({ success: false, error: String(e) });
     }
-  })();
-  // Keep sendResponse alive for the async IIFE above
-  return true;
+  }
 });

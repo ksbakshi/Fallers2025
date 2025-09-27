@@ -29,24 +29,47 @@ if (!window.__voice_nav_injected__) {
   let listening = false;
   let recognition;
 
-  // Voice command processing function
   function processVoiceCommand(transcript) {
-    // Normalize: strip filler punctuation & extra spaces
     const cleaned = transcript
       .toLowerCase()
       .replace(/[.,!?]/g, " ")
       .replace(/\s+/g, " ")
       .trim();
 
-    // Look for "search ..." or "search for ..."
-    const m = cleaned.match(/\bsearch(?: for)?\s+(.+?)$/i);
-    if (m && m[1]) {
-      const query = m[1].trim();
-      executeSearch(query);
-      stopListening();
-      return true;
+    const m = cleaned.match(/\bsearch(?: for)?\s+(.+)$/i);
+    if (!m) return false;
+
+    let query = m[1].trim();
+
+    // target parsing
+    let target = "current"; // default: same tab
+    if (/\b(in|on)\s+(a\s+)?new\s+tab\b/.test(query) || /\bnew\s+tab\b/.test(query)) {
+      target = "new";
+      query = query.replace(/\b(in|on)\s+(a\s+)?new\s+tab\b/g, "").replace(/\bnew\s+tab\b/g, "").trim();
+    } else if (/\b(here|this\s+tab|same\s+tab)\b/.test(query)) {
+      target = "current";
+      query = query.replace(/\b(here|this\s+tab|same\s+tab)\b/g, "").trim();
     }
-    return false;
+
+    if (!query) return false;
+
+    executeSearch(query, target);
+    stopListening();
+    return true;
+  }
+
+  function executeSearch(query, target = "current") {
+    btn.textContent = `🔍 Searching: ${query}`;
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+
+    chrome.runtime.sendMessage({
+      type: "OPEN_SEARCH",
+      url: searchUrl,
+      target,                   // "current" or "new"
+    });
+
+    hideCommandHint();
+    setTimeout(() => { btn.textContent = "🎤 Voice Nav (off)"; }, 1200);
   }
 
   // (helper) add this to manage consistent stopping
@@ -57,60 +80,27 @@ if (!window.__voice_nav_injected__) {
     }
   }
 
-  // Execute search function
-  function executeSearch(query) {
-    // Provide visual feedback
-    btn.textContent = `🔍 Searching: ${query}`;
-
-    // Create search URL
-    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(
-      query
-    )}`;
-
-    // Open search in new tab
-    chrome.runtime.sendMessage({
-      type: "OPEN_SEARCH",
-      url: searchUrl,
-    });
-
-    // Hide command hints
-    hideCommandHint();
-
-    // Reset button after showing search feedback
-    setTimeout(() => {
-      btn.textContent = "🎤 Voice Nav (off)";
-    }, 2000);
-  }
-
   const SpeechRecognition =
     window.SpeechRecognition || window.webkitSpeechRecognition;
   if (SpeechRecognition) {
     recognition = new SpeechRecognition();
     recognition.lang = "en-US";
-    recognition.continuous = true;       // keep listening for multiple phrases
+    recognition.continuous = false;     // end after each phrase
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
     recognition.onresult = (event) => {
-      // Use only the latest final result
       const res = event.results[event.results.length - 1];
       if (!res || !res.isFinal) return;
 
       const transcript = res[0].transcript;
-      console.log("Heard:", transcript);
-
-      // Try to parse a command anywhere in the sentence
-      const handled = processVoiceCommand(transcript);
-
-      // UI feedback (truncate if long)
-      const displayText = transcript.length > 20 ? transcript.substring(0, 20) + "..." : transcript;
-      btn.textContent = handled ? btn.textContent : `🎤 ${displayText}`;
+      processVoiceCommand(transcript);   // this calls executeSearch() immediately if it finds "search ..."
     };
 
     recognition.onend = () => {
       hideCommandHint();
-      if (listening) {
-        try { recognition.start(); } catch (_) { /* ignore 'already started' races */ }
+      if (listening) {                   // auto-restart while toggle is ON
+        try { recognition.start(); } catch (_) {}
         btn.textContent = "🎤 Listening...";
       } else if (!btn.textContent.includes('🔍 Searching:')) {
         btn.textContent = "🎤 Voice Nav (off)";
