@@ -9,3 +9,12 @@ chrome.commands.onCommand.addListener(async (command) => {
   });
   chrome.tabs.sendMessage(tab.id, { type: "TOGGLE_OVERLAY" });
 });
+
+// Handle messages from content script
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === 'OPEN_SEARCH') {
+    // Open search URL in new tab
+    chrome.tabs.create({ url: request.url });
+    sendResponse({ success: true });
+  }
+});

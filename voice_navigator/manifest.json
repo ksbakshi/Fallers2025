@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Voice Navigator",
   "version": "0.0.1",
-  "description": "Step 1: Test overlay injection.",
+  "description": "Voice-controlled browser with search functionality. Say 'search [query]' to search Google.",
   "permissions": ["scripting", "tabs", "activeTab"],
   "background": { "service_worker": "service_worker.js" },
   "commands": {
