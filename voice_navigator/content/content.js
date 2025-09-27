@@ -31,19 +31,29 @@ if (!window.__voice_nav_injected__) {
 
   // Voice command processing function
   function processVoiceCommand(transcript) {
-    const lowerTranscript = transcript.toLowerCase().trim();
+    // Normalize: strip filler punctuation & extra spaces
+    const cleaned = transcript
+      .toLowerCase()
+      .replace(/[.,!?]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
 
-    // Search command: "search [query]" or "search for [query]"
-    if (lowerTranscript.startsWith("search ")) {
-      const searchQuery = lowerTranscript.replace(/^search (for )?/, "").trim();
-      if (searchQuery) {
-        executeSearch(searchQuery);
-        // Stop listening after executing command
-        if (recognition && listening) {
-          recognition.stop();
-          listening = false;
-        }
-      }
+    // Look for "search ..." or "search for ..."
+    const m = cleaned.match(/\bsearch(?: for)?\s+(.+?)$/i);
+    if (m && m[1]) {
+      const query = m[1].trim();
+      executeSearch(query);
+      stopListening();
+      return true;
+    }
+    return false;
+  }
+
+  // (helper) add this to manage consistent stopping
+  function stopListening() {
+    if (recognition && listening) {
+      recognition.stop();
+      listening = false;
     }
   }
 
@@ -77,32 +87,32 @@ if (!window.__voice_nav_injected__) {
   if (SpeechRecognition) {
     recognition = new SpeechRecognition();
     recognition.lang = "en-US";
-    recognition.continuous = false; // Changed to false to stop after each command
-    recognition.interimResults = false; // Changed to false to get final results only
+    recognition.continuous = true;       // keep listening for multiple phrases
+    recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
     recognition.onresult = (event) => {
-      const transcript = Array.from(event.results)
-        .map((res) => res[0].transcript)
-        .join("");
+      // Use only the latest final result
+      const res = event.results[event.results.length - 1];
+      if (!res || !res.isFinal) return;
+
+      const transcript = res[0].transcript;
       console.log("Heard:", transcript);
 
-      // Process voice commands
-      processVoiceCommand(transcript);
+      // Try to parse a command anywhere in the sentence
+      const handled = processVoiceCommand(transcript);
 
-      // Show live feedback (truncated if too long)
-      const displayText =
-        transcript.length > 20
-          ? transcript.substring(0, 20) + "..."
-          : transcript;
-      btn.textContent = `🎤 ${displayText}`;
+      // UI feedback (truncate if long)
+      const displayText = transcript.length > 20 ? transcript.substring(0, 20) + "..." : transcript;
+      btn.textContent = handled ? btn.textContent : `🎤 ${displayText}`;
     };
 
     recognition.onend = () => {
-      listening = false;
       hideCommandHint();
-      // Only reset button if it's not showing a search message
-      if (!btn.textContent.includes("🔍 Searching:")) {
+      if (listening) {
+        try { recognition.start(); } catch (_) { /* ignore 'already started' races */ }
+        btn.textContent = "🎤 Listening...";
+      } else if (!btn.textContent.includes('🔍 Searching:')) {
         btn.textContent = "🎤 Voice Nav (off)";
       }
     };
@@ -114,13 +124,13 @@ if (!window.__voice_nav_injected__) {
   btn.addEventListener("click", () => {
     if (!recognition) return;
     if (!listening) {
-      recognition.start();
       listening = true;
+      try { recognition.start(); } catch (_) {}
       btn.textContent = "🎤 Listening...";
       showCommandHint();
     } else {
-      recognition.stop();
       listening = false;
+      try { recognition.stop(); } catch (_) {}
       btn.textContent = "🎤 Voice Nav (off)";
       hideCommandHint();
     }
