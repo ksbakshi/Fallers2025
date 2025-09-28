@@ -28,6 +28,8 @@ if (!window.__voice_nav_injected__) {
     if (!show) stopListening();
   };
 
+  let isRunning = false;
+
   // ✅ called by SW after navigation to auto-resume
   window.__voice_nav_autostart = () => {
     btn.style.display = "block";
@@ -58,7 +60,9 @@ if (!window.__voice_nav_injected__) {
       let t = text;
       if (/\b(in|on)\s+(a\s+)?new\s+tab\b/.test(t) || /\bnew\s+tab\b/.test(t)) {
         target = "new";
-        t = t.replace(/\b(in|on)\s+(a\s+)?new\s+tab\b/g, "").replace(/\bnew\s+tab\b/g, "");
+        t = t
+          .replace(/\b(in|on)\s+(a\s+)?new\s+tab\b/g, "")
+          .replace(/\bnew\s+tab\b/g, "");
       } else if (/\b(here|this\s+tab|same\s+tab)\b/.test(t)) {
         target = "current";
         t = t.replace(/\b(here|this\s+tab|same\s+tab)\b/g, "");
@@ -71,8 +75,8 @@ if (!window.__voice_nav_injected__) {
     if (m && m[1]) {
       const raw = stripTarget(m[1]);
       if (raw) {
-        executeGoto(raw, target);      // defined below
-        stopListening();               // we’re navigating away
+        executeGoto(raw, target); // defined below
+        stopListening(); // we’re navigating away
         return true;
       }
     }
@@ -103,17 +107,19 @@ if (!window.__voice_nav_injected__) {
     }
 
     // 5) "scroll [down|up|top|bottom]" (default: down a screen)
-    m = cleaned.match(/\bscroll(?:\s+(down|up|top|bottom|to the top|to the bottom|page down|page up))?\b/);
+    m = cleaned.match(
+      /\bscroll(?:\s+(down|up|top|bottom|to the top|to the bottom|page down|page up))?\b/
+    );
     if (m) {
       const dir = (m[1] || "down").toLowerCase();
-      performScroll(dir);              // defined below
+      performScroll(dir); // defined below
       // don't stopListening() so user can keep saying "scroll down"
       return true;
     }
 
     // 6) "next page" / "next results"
     if (/\b(next page|next results|more results)\b/.test(cleaned)) {
-      goToNextResultsPage();           // defined below
+      goToNextResultsPage(); // defined below
       stopListening();
       return true;
     }
@@ -122,19 +128,19 @@ if (!window.__voice_nav_injected__) {
   }
 
   const SITE_ALIASES = {
-    "youtube": "https://www.youtube.com",
-    "gmail": "https://mail.google.com",
-    "maps": "https://maps.google.com",
-    "github": "https://github.com",
-    "stackoverflow": "https://stackoverflow.com",
-    "wikipedia": "https://wikipedia.org",
-    "reddit": "https://www.reddit.com",
-    "instagram": "https://www.instagram.com",
-    "x": "https://x.com",
-    "linkedin": "https://www.linkedin.com",
-    "sfu": "https://www.sfu.ca",
-    "canvas": "https://canvas.sfu.ca",
-    "chatgpt": "https://chat.openai.com"
+    youtube: "https://www.youtube.com",
+    gmail: "https://mail.google.com",
+    maps: "https://maps.google.com",
+    github: "https://github.com",
+    stackoverflow: "https://stackoverflow.com",
+    wikipedia: "https://wikipedia.org",
+    reddit: "https://www.reddit.com",
+    instagram: "https://www.instagram.com",
+    x: "https://x.com",
+    linkedin: "https://www.linkedin.com",
+    sfu: "https://www.sfu.ca",
+    canvas: "https://canvas.sfu.ca",
+    chatgpt: "https://chat.openai.com",
   };
 
   // Build a URL from a spoken target (tries alias → domain → search)
@@ -164,7 +170,9 @@ if (!window.__voice_nav_injected__) {
     btn.textContent = `🧭 Going to: ${targetText}`;
     chrome.runtime.sendMessage({ type: "NAVIGATE_TO", url, target });
     hideCommandHint();
-    setTimeout(() => { btn.textContent = "🎤 Voice Nav (off)"; }, 1200);
+    setTimeout(() => {
+      btn.textContent = "🎤 Voice Nav (off)";
+    }, 1200);
   }
 
   // Smooth scroll utility
@@ -208,7 +216,7 @@ if (!window.__voice_nav_injected__) {
     const next =
       document.querySelector('a[aria-label="Next"]') ||
       document.querySelector('a[rel="next"]') ||
-      Array.from(document.querySelectorAll("a")).find(a =>
+      Array.from(document.querySelectorAll("a")).find((a) =>
         /^(next|more)$/i.test(a.textContent.trim())
       );
 
@@ -318,8 +326,11 @@ if (!window.__voice_nav_injected__) {
         max-width: 200px;
       ">
         <strong>Available Commands:</strong><br>
-        • "search [your query]"<br>
-        • "search for [your query]"
+       • "search [&hellip;]" or "search for [&hellip;]"<br>
+        • "go to/open/navigate to [&hellip;] [in a new tab]"<br>
+        • "back" / "forward"<br>
+        • "scroll [down|up|top|bottom]"<br>
+        • "next page"
       </div>
     `;
     document.body.appendChild(hint);

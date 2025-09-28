@@ -1,20 +1,22 @@
-{
-  "manifest_version": 3,
-  "name": "Voice Navigator",
-  "version": "0.0.2",
-  "description": "Voice-controlled browser with search, same-tab nav, and continuous listening.",
-  "permissions": [
-    "scripting",
-    "tabs",
-    "activeTab",
-    "webNavigation"
-  ],
-  "background": { "service_worker": "service_worker.js" },
-  "commands": {
-    "toggle-mic": {
-      "suggested_key": { "default": "Alt+Shift+V" },
-      "description": "Toggle overlay"
-    }
-  },
-  "action": { "default_title": "Voice Navigator" }   // optional but nice
-}
+ {
+   "manifest_version": 3,
+   "name": "Voice Navigator",
+   "version": "0.0.2",
+   "description": "Voice-controlled browser with search, same-tab nav, and continuous listening.",
+   "permissions": [
+     "scripting",
+     "tabs",
+     "activeTab",
+    "webNavigation",
+    "storage"
+   ],
+  "host_permissions": ["<all_urls>"],
+   "background": { "service_worker": "service_worker.js" },
+   "commands": {
+     "toggle-mic": {
+       "suggested_key": { "default": "Alt+Shift+V" },
+       "description": "Toggle overlay"
+     }
+   },
+   "action": { "default_title": "Voice Navigator" }
+ }

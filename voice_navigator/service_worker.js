@@ -1,4 +1,36 @@
-const listeningTabs = new Set();
+// Persist listening state per tab so it survives worker restarts.
+const STORAGE_KEY = "vn_listening_tabs"; // { [tabId: string]: true }
+
+async function getListeningMap() {
+  const { [STORAGE_KEY]: map } = await chrome.storage.session.get(STORAGE_KEY);
+  return map || {};
+}
+
+async function setListeningMap(map) {
+  try {
+    await chrome.storage.session.set({ [STORAGE_KEY]: map });
+  } catch (e) {
+    console.error("Failed to set listening map:", e);
+    throw e;
+  }
+}
+
+async function addListeningTab(tabId) {
+  const map = await getListeningMap();
+  map[String(tabId)] = true;
+  await setListeningMap(map);
+}
+
+async function removeListeningTab(tabId) {
+  const map = await getListeningMap();
+  delete map[String(tabId)];
+  await setListeningMap(map);
+}
+
+async function isListeningTab(tabId) {
+  const map = await getListeningMap();
+  return !!map[String(tabId)];
+}
 
 chrome.commands.onCommand.addListener(async (command) => {
   if (command !== "toggle-mic") return;
@@ -17,30 +49,51 @@ chrome.commands.onCommand.addListener(async (command) => {
   });
 });
 
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  try {
+    await removeListeningTab(tabId);
+  } catch {}
+});
+
 // Messages: OPEN_SEARCH + LISTENING_STATE
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     try {
       if (msg?.type === "OPEN_SEARCH" && msg.url) {
         const target = msg.target || "current";
-        if (target === "new")
+        if (target === "new") {
           await chrome.tabs.create({ url: msg.url, active: false });
-        else if (sender?.tab?.id)
+          if (sender?.tab?.id && (await isListeningTab(sender.tab.id))) {
+            await addListeningTab(newTab.id);
+          }
+        } else if (sender?.tab?.id)
           await chrome.tabs.update(sender.tab.id, { url: msg.url });
         else await chrome.tabs.create({ url: msg.url });
         sendResponse?.({ success: true });
         return;
       }
+      // if (msg?.type === "LISTENING_STATE" && sender?.tab?.id) {
+      //   if (msg.state === "ON") listeningTabs.add(sender.tab.id);
+      //   else listeningTabs.delete(sender.tab.id);
+      //   sendResponse?.({ success: true });
+      //   return;
+      // }
       if (msg?.type === "LISTENING_STATE" && sender?.tab?.id) {
-        if (msg.state === "ON") listeningTabs.add(sender.tab.id);
-        else listeningTabs.delete(sender.tab.id);
+        if (msg.state === "ON") await addListeningTab(sender.tab.id);
+        else await removeListeningTab(sender.tab.id);
         sendResponse?.({ success: true });
         return;
       }
       if (msg?.type === "NAVIGATE_TO" && msg.url) {
         const target = msg.target || "current";
         if (target === "new") {
-          await chrome.tabs.create({ url: msg.url, active: false });
+          const newTab = await chrome.tabs.create({
+            url: msg.url,
+            active: false,
+          });
+          if (sender?.tab?.id && (await isListeningTab(sender.tab.id))) {
+            await addListeningTab(newTab.id);
+          }
         } else if (sender?.tab?.id) {
           await chrome.tabs.update(sender.tab.id, { url: msg.url });
         } else {
@@ -56,12 +109,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
         // Prefer native APIs if present
         if (msg.direction === "back" && chrome.tabs.goBack) {
-          try { await chrome.tabs.goBack(tabId); } catch {}
+          try {
+            await chrome.tabs.goBack(tabId);
+          } catch {}
           sendResponse?.({ success: true });
           return;
         }
         if (msg.direction === "forward" && chrome.tabs.goForward) {
-          try { await chrome.tabs.goForward(tabId); } catch {}
+          try {
+            await chrome.tabs.goForward(tabId);
+          } catch {}
           sendResponse?.({ success: true });
           return;
         }
@@ -70,7 +127,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         try {
           await chrome.scripting.executeScript({
             target: { tabId },
-            func: (dir) => { dir === "back" ? history.back() : history.forward(); },
+            func: (dir) => {
+              dir === "back" ? history.back() : history.forward();
+            },
             args: [msg.direction],
           });
           sendResponse?.({ success: true });
@@ -94,7 +153,7 @@ function shouldAutoResume(url) {
 
 chrome.webNavigation.onCommitted.addListener(async (details) => {
   if (details.frameId !== 0) return; // only top frame
-  if (!listeningTabs.has(details.tabId)) return;
+  if (!(await isListeningTab(details.tabId))) return;
   if (!shouldAutoResume(details.url)) return;
 
   try {
@@ -114,7 +173,7 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
 // Also handle SPA route changes
 chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
   if (details.frameId !== 0) return;
-  if (!listeningTabs.has(details.tabId)) return;
+  if (!(await isListeningTab(details.tabId))) return;
   if (!shouldAutoResume(details.url)) return;
 
   try {
