@@ -66,8 +66,51 @@ if (!window.__voice_nav_injected__) {
       return t.trim();
     };
 
+    let m = cleaned.match(/\b(?:play(?:\s+song)?|listen to|music)\s+(.+?)$/i);
+    if (m && m[1]) {
+      const songQuery = m[1].trim();
+      if (songQuery) {
+        // Ask the background to open the music side panel. Keep listening so
+        // the user can continue issuing commands. If the background fails
+        // to open the panel (older Chrome or error), fallback to opening the
+        // panel URL in a new tab.
+        chrome.runtime.sendMessage({ type: "OPEN_MUSIC_PANEL", query: songQuery }, (resp) => {
+          // If the background didn't open the side panel, ask it to open
+          // the extension page in a new tab. This avoids direct window.open
+          // on chrome-extension:// URLs which some clients/adblockers block.
+          if (chrome.runtime.lastError || !(resp && resp.success)) {
+            chrome.runtime.sendMessage({ type: "OPEN_SEARCH", url, target: "new" }, (r2) => {
+              if (chrome.runtime.lastError || !(r2 && r2.success)) {
+                // Final fallback: inform the user. Many blockers block chrome-extension:// pages.
+                btn.textContent = "⚠️ Could not open player — try disabling adblock/whitelisting this extension";
+                console.warn('Failed to open sidepanel page for', songQuery, chrome.runtime.lastError, resp, r2);
+              }
+            });
+          }
+        });
+
+        // Also open YouTube search results in a new tab so the user can play
+        // the song directly on YouTube if the side panel/embed is unavailable.
+        try {
+          const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(songQuery)}`;
+          chrome.runtime.sendMessage({ type: "OPEN_SEARCH", url: ytUrl, target: "new" }, (r3) => {
+            if (chrome.runtime.lastError || !(r3 && r3.success)) {
+              console.warn('Failed to open YouTube search tab for', songQuery, chrome.runtime.lastError, r3);
+            }
+          });
+        } catch (e) {
+          console.warn('Error while requesting YouTube tab open', e);
+        }
+
+        // Give quick feedback but do NOT stop listening immediately.
+        btn.textContent = `🎵 Playing: ${songQuery}`;
+        hideCommandHint();
+        return true;
+      }
+    }
+
     // 1) "go to / open / navigate to <site>"
-    let m = cleaned.match(/\b(?:go to|open|navigate to)\s+(.+?)$/i);
+    m = cleaned.match(/\b(?:go to|open|navigate to)\s+(.+?)$/i);
     if (m && m[1]) {
       const raw = stripTarget(m[1]);
       if (raw) {
